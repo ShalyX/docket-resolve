@@ -1,7 +1,10 @@
 {
   "agreementId": "agent-build-2026-019",
-  "amountMinor": 250000,
-  "currency": "USDC",
+  "amountAtomic": 250000000,
+  "asset": {
+    "symbol": "USDC",
+    "decimals": 6
+  },
   "policy": {
     "conflictSpread": 35,
     "criticalFailureCapPercent": 20

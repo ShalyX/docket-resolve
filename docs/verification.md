@@ -43,7 +43,7 @@ curl -sS -X POST "$API_ORIGIN/v1/evaluations" \
   --data-binary @examples/agreement.json
 ```
 
-The example deterministically recommends a 92% release: `230000` minor units released and `20000` held.
+The example deterministically recommends a 92% release: `230000000` atomic units released and `20000000` held. With the declared six-decimal USDC denomination, that is 230 USDC released and 20 USDC held.
 
 ## 5. Conflict path
 

@@ -2,7 +2,7 @@
 
 Docket Resolve turns structured evidence about agent-to-agent work into a deterministic, explainable settlement recommendation.
 
-It does one job: given an agreed amount, weighted acceptance criteria, evidence references, and evaluator findings, return how much should be released, how much should remain on hold, and why.
+It does one job: given an agreed amount in explicitly denominated atomic units, weighted acceptance criteria, evidence references, and evaluator findings, return how much should be released, how much should remain on hold, and why.
 
 The service does not move funds, fetch private data, or pretend to verify evidence it cannot see. It produces a recommendation that another agent, marketplace, or human can inspect before acting.
 
@@ -53,11 +53,12 @@ Production deployments must set `XAGT_COMMIT` to the exact 40-character reviewed
 
 1. Criterion weights must total 100.
 2. Every finding must cite evidence for the same criterion.
-3. Findings are aggregated by confidence-weighted score.
-4. Failed evidence caps the affected criterion at 49.
-5. A failed critical criterion applies the agreement's declared release cap.
-6. A score spread at or above the declared conflict threshold routes the case to manual review and suppresses the financial recommendation.
-7. Otherwise, each criterion earns its weighted share of the agreement amount and the shares are summed.
+3. Each evaluator may submit at most one finding per criterion.
+4. Findings are aggregated by confidence-weighted score.
+5. A criterion with no passing evidence earns nothing; failed evidence also marks it contradicted.
+6. A failed critical criterion applies the agreement's declared release cap.
+7. A score spread at or above the declared conflict threshold routes the case to manual review and suppresses the financial recommendation.
+8. Otherwise, each criterion earns its weighted share of the agreement amount and the shares are summed.
 
 The `evaluationId` is derived from a canonical SHA-256 digest of the input. Identical input produces the same result and identifier.
 

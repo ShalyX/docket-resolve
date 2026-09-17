@@ -29,8 +29,8 @@ async function withServer(run) {
 function agreement() {
   return {
     agreementId: "agreement_http_001",
-    amountMinor: 50_000,
-    currency: "USDC",
+    amountAtomic: 50_000_000,
+    asset: { symbol: "USDC", decimals: 6 },
     criteria: [
       {
         id: "delivery",
@@ -98,7 +98,7 @@ test("evaluates a valid agreement over HTTP", async () => {
 
     assert.equal(response.status, 200);
     assert.equal(body.decision, "release_full");
-    assert.equal(body.recommendedReleaseMinor, 50_000);
+    assert.equal(body.recommendedReleaseAtomic, 50_000_000);
   });
 });
 
@@ -135,6 +135,20 @@ test("rejects malformed JSON without exposing internals", async () => {
       "requestId",
     ]);
     assert.equal(body.error.code, "INVALID_JSON");
+  });
+});
+
+test("rejects oversized bodies with a structured response", async () => {
+  await withServer(async (origin) => {
+    const response = await fetch(`${origin}/v1/evaluations`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ padding: "x".repeat(256 * 1024) }),
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 413);
+    assert.equal(body.error.code, "PAYLOAD_TOO_LARGE");
   });
 });
 

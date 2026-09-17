@@ -1,7 +1,7 @@
 const exampleAgreement = {
   agreementId: "agent-build-2026-019",
-  amountMinor: 250000,
-  currency: "USDC",
+  amountAtomic: 250000000,
+  asset: { symbol: "USDC", decimals: 6 },
   policy: {
     conflictSpread: 35,
     criticalFailureCapPercent: 20,
@@ -98,12 +98,18 @@ function resetExample() {
   requestState.className = "";
 }
 
-function formatAmount(minor, currency) {
-  if (minor === null) return "Pending review";
-  return `${(minor / 100).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })} ${currency}`;
+function formatAmount(atomic, asset) {
+  if (atomic === null) return "Pending review";
+  const raw = BigInt(atomic);
+  const base = 10n ** BigInt(asset.decimals);
+  const whole = raw / base;
+  let fraction = asset.decimals > 0
+    ? (raw % base).toString().padStart(asset.decimals, "0").replace(/0+$/, "")
+    : "";
+  if (asset.decimals > 0) {
+    fraction = fraction.padEnd(Math.min(2, asset.decimals), "0");
+  }
+  return `${whole.toLocaleString()}${fraction ? `.${fraction}` : ""} ${asset.symbol}`;
 }
 
 function decisionLabel(decision) {
@@ -123,8 +129,8 @@ function renderEvaluation(result) {
   );
   document.querySelector("#decision-stamp").textContent = decisionLabel(result.decision);
   document.querySelector("#release-amount").textContent = formatAmount(
-    result.recommendedReleaseMinor,
-    result.currency,
+    result.recommendedReleaseAtomic,
+    result.asset,
   );
   document.querySelector("#release-ratio").textContent =
     result.settlementRatioBps === null
@@ -149,7 +155,7 @@ function renderEvaluation(result) {
       score.textContent = `${criterion.score}`;
       const earned = document.createElement("span");
       earned.className = "earned";
-      earned.textContent = formatAmount(criterion.earnedMinor, result.currency);
+      earned.textContent = formatAmount(criterion.earnedAtomic, result.asset);
       row.append(name, score, earned);
       return row;
     }),

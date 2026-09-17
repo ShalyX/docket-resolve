@@ -16,19 +16,25 @@ function readJsonBody(request) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     let size = 0;
+    let tooLarge = false;
 
     request.on("data", (chunk) => {
+      if (tooLarge) return;
       size += chunk.length;
       if (size > MAX_BODY_BYTES) {
-        const error = new Error("Request body exceeds 256 KiB.");
-        error.code = "PAYLOAD_TOO_LARGE";
-        reject(error);
-        request.destroy();
+        tooLarge = true;
+        chunks.length = 0;
         return;
       }
       chunks.push(chunk);
     });
     request.on("end", () => {
+      if (tooLarge) {
+        const error = new Error("Request body exceeds 256 KiB.");
+        error.code = "PAYLOAD_TOO_LARGE";
+        reject(error);
+        return;
+      }
       try {
         const raw = Buffer.concat(chunks).toString("utf8");
         resolve(JSON.parse(raw));

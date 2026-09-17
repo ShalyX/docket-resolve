@@ -7,6 +7,7 @@ const ALLOWED_EVIDENCE_KINDS = new Set([
   "receipt",
 ]);
 const ALLOWED_EVIDENCE_RESULTS = new Set(["pass", "fail", "inconclusive"]);
+const MAX_ATOMIC_AMOUNT = Math.floor(Number.MAX_SAFE_INTEGER / 100);
 
 export class EvaluationError extends Error {
   constructor(code, message, details = undefined) {
@@ -73,12 +74,29 @@ function evaluationIdFor(agreement) {
 function validateAgreement(agreement) {
   assert(isPlainObject(agreement), "INVALID_BODY", "Request body must be an object.");
   assertNonEmptyString(agreement.agreementId, "agreementId");
-  assertNonEmptyString(agreement.currency, "currency");
+  assert(isPlainObject(agreement.asset), "INVALID_FIELD", "asset must be an object.", { field: "asset" });
+  assertNonEmptyString(agreement.asset.symbol, "asset.symbol");
   assert(
-    Number.isSafeInteger(agreement.amountMinor) && agreement.amountMinor > 0,
+    /^[A-Za-z0-9._-]{1,16}$/.test(agreement.asset.symbol),
     "INVALID_FIELD",
-    "amountMinor must be a positive safe integer.",
-    { field: "amountMinor" },
+    "asset.symbol contains unsupported characters.",
+    { field: "asset.symbol" },
+  );
+  assert(
+    Number.isInteger(agreement.asset.decimals) &&
+      agreement.asset.decimals >= 0 &&
+      agreement.asset.decimals <= 18,
+    "INVALID_FIELD",
+    "asset.decimals must be an integer from 0 to 18.",
+    { field: "asset.decimals" },
+  );
+  assert(
+    Number.isSafeInteger(agreement.amountAtomic) &&
+      agreement.amountAtomic > 0 &&
+      agreement.amountAtomic <= MAX_ATOMIC_AMOUNT,
+    "INVALID_FIELD",
+    `amountAtomic must be a positive integer no greater than ${MAX_ATOMIC_AMOUNT}.`,
+    { field: "amountAtomic" },
   );
   assert(Array.isArray(agreement.criteria) && agreement.criteria.length > 0,
     "INVALID_FIELD", "criteria must contain at least one item.", { field: "criteria" });
@@ -156,6 +174,7 @@ function validateAgreement(agreement) {
     );
   }
 
+  const evaluatorCriterionPairs = new Set();
   for (const finding of agreement.findings) {
     assert(
       criterionIds.has(finding.criterionId),
@@ -164,6 +183,14 @@ function validateAgreement(agreement) {
       { findingId: finding.id, criterionId: finding.criterionId },
     );
     assertNonEmptyString(finding.evaluator, `findings.${finding.id}.evaluator`);
+    const evaluatorCriterionKey = `${finding.criterionId}\u0000${finding.evaluator.trim().toLowerCase()}`;
+    assert(
+      !evaluatorCriterionPairs.has(evaluatorCriterionKey),
+      "DUPLICATE_EVALUATOR_FINDING",
+      `Evaluator ${finding.evaluator} submitted more than one finding for criterion ${finding.criterionId}.`,
+      { evaluator: finding.evaluator, criterionId: finding.criterionId },
+    );
+    evaluatorCriterionPairs.add(evaluatorCriterionKey);
     assertNonEmptyString(finding.rationale, `findings.${finding.id}.rationale`);
     assert(
       Number.isFinite(finding.score) && finding.score >= 0 && finding.score <= 100,
@@ -243,6 +270,7 @@ export function evaluateAgreement(agreement) {
       (item) => item.criterionId === criterion.id,
     );
     const failedEvidence = evidence.some((item) => item.result === "fail");
+    const hasSupportingEvidence = evidence.some((item) => item.result === "pass");
     const enoughEvidence = evidence.length >= criterion.minimumEvidence;
     const scores = findings.map(({ score }) => score);
     const conflict =
@@ -261,6 +289,11 @@ export function evaluateAgreement(agreement) {
       criterionReasons.push("MISSING_FINDING");
       reasons.add("MISSING_FINDING");
     }
+    if (!hasSupportingEvidence) {
+      score = 0;
+      criterionReasons.push("NO_SUPPORTING_EVIDENCE");
+      reasons.add("NO_SUPPORTING_EVIDENCE");
+    }
     if (failedEvidence) {
       score = Math.min(score, 49);
       criterionReasons.push("CONTRADICTING_EVIDENCE");
@@ -278,10 +311,10 @@ export function evaluateAgreement(agreement) {
       criticalFailure = true;
     }
 
-    const allocatedMinor = Math.floor(
-      (agreement.amountMinor * criterion.weight) / 100,
+    const allocatedAtomic = Math.floor(
+      (agreement.amountAtomic * criterion.weight) / 100,
     );
-    const earnedMinor = Math.floor((allocatedMinor * score) / 100);
+    const earnedAtomic = Math.floor((allocatedAtomic * score) / 100);
 
     return {
       id: criterion.id,
@@ -289,8 +322,8 @@ export function evaluateAgreement(agreement) {
       critical: criterion.critical,
       weight: criterion.weight,
       score,
-      allocatedMinor,
-      earnedMinor,
+      allocatedAtomic,
+      earnedAtomic,
       evidenceCount: evidence.length,
       findingCount: findings.length,
       status: conflict
@@ -308,15 +341,15 @@ export function evaluateAgreement(agreement) {
     reasons.add("CRITICAL_CRITERION_FAILED");
   }
 
-  let recommendedReleaseMinor = criteria.reduce(
-    (sum, criterion) => sum + criterion.earnedMinor,
+  let recommendedReleaseAtomic = criteria.reduce(
+    (sum, criterion) => sum + criterion.earnedAtomic,
     0,
   );
   if (criticalFailure) {
-    const capMinor = Math.floor(
-      (agreement.amountMinor * policy.criticalFailureCapPercent) / 100,
+    const capAtomic = Math.floor(
+      (agreement.amountAtomic * policy.criticalFailureCapPercent) / 100,
     );
-    recommendedReleaseMinor = Math.min(recommendedReleaseMinor, capMinor);
+    recommendedReleaseAtomic = Math.min(recommendedReleaseAtomic, capAtomic);
   }
 
   if (requiresManualReview) {
@@ -325,24 +358,24 @@ export function evaluateAgreement(agreement) {
       evaluationId: evaluationIdFor(agreement),
       agreementId: agreement.agreementId,
       decision: "manual_review",
-      currency: agreement.currency,
-      amountMinor: agreement.amountMinor,
-      recommendedReleaseMinor: null,
-      recommendedHoldMinor: null,
+      asset: agreement.asset,
+      amountAtomic: agreement.amountAtomic,
+      recommendedReleaseAtomic: null,
+      recommendedHoldAtomic: null,
       settlementRatioBps: null,
       criteria,
       reasonCodes: [...reasons].sort(),
     };
   }
 
-  const recommendedHoldMinor = agreement.amountMinor - recommendedReleaseMinor;
+  const recommendedHoldAtomic = agreement.amountAtomic - recommendedReleaseAtomic;
   const settlementRatioBps = Math.floor(
-    (recommendedReleaseMinor * 10_000) / agreement.amountMinor,
+    (recommendedReleaseAtomic * 10_000) / agreement.amountAtomic,
   );
   const decision =
-    recommendedReleaseMinor === agreement.amountMinor
+    recommendedReleaseAtomic === agreement.amountAtomic
       ? "release_full"
-      : recommendedReleaseMinor > 0
+      : recommendedReleaseAtomic > 0
         ? "release_partial"
         : "hold";
 
@@ -351,10 +384,10 @@ export function evaluateAgreement(agreement) {
     evaluationId: evaluationIdFor(agreement),
     agreementId: agreement.agreementId,
     decision,
-    currency: agreement.currency,
-    amountMinor: agreement.amountMinor,
-    recommendedReleaseMinor,
-    recommendedHoldMinor,
+    asset: agreement.asset,
+    amountAtomic: agreement.amountAtomic,
+    recommendedReleaseAtomic,
+    recommendedHoldAtomic,
     settlementRatioBps,
     criteria,
     reasonCodes: [...reasons].sort(),

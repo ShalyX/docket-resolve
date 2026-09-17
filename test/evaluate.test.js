@@ -6,8 +6,8 @@ import { EvaluationError, evaluateAgreement } from "../src/evaluate.js";
 function baseAgreement() {
   return {
     agreementId: "agreement_demo_001",
-    amountMinor: 100_000,
-    currency: "USDC",
+    amountAtomic: 100_000_000,
+    asset: { symbol: "USDC", decimals: 6 },
     policy: {
       conflictSpread: 35,
       criticalFailureCapPercent: 20,
@@ -73,8 +73,8 @@ test("recommends a full release when every criterion is fully satisfied", () => 
   const result = evaluateAgreement(baseAgreement());
 
   assert.equal(result.decision, "release_full");
-  assert.equal(result.recommendedReleaseMinor, 100_000);
-  assert.equal(result.recommendedHoldMinor, 0);
+  assert.equal(result.recommendedReleaseAtomic, 100_000_000);
+  assert.equal(result.recommendedHoldAtomic, 0);
   assert.equal(result.settlementRatioBps, 10_000);
   assert.deepEqual(result.reasonCodes, []);
 });
@@ -86,10 +86,10 @@ test("recommends a proportional release from weighted criterion scores", () => {
   const result = evaluateAgreement(agreement);
 
   assert.equal(result.decision, "release_partial");
-  assert.equal(result.recommendedReleaseMinor, 80_000);
-  assert.equal(result.recommendedHoldMinor, 20_000);
+  assert.equal(result.recommendedReleaseAtomic, 80_000_000);
+  assert.equal(result.recommendedHoldAtomic, 20_000_000);
   assert.equal(result.settlementRatioBps, 8_000);
-  assert.equal(result.criteria[1].earnedMinor, 20_000);
+  assert.equal(result.criteria[1].earnedAtomic, 20_000_000);
 });
 
 test("applies the declared cap when a critical criterion fails", () => {
@@ -100,10 +100,10 @@ test("applies the declared cap when a critical criterion fails", () => {
   const result = evaluateAgreement(agreement);
 
   assert.equal(result.decision, "release_partial");
-  assert.equal(result.recommendedReleaseMinor, 20_000);
-  assert.equal(result.recommendedHoldMinor, 80_000);
+  assert.equal(result.recommendedReleaseAtomic, 20_000_000);
+  assert.equal(result.recommendedHoldAtomic, 80_000_000);
   assert.ok(result.reasonCodes.includes("CRITICAL_CRITERION_FAILED"));
-  assert.equal(result.criteria[0].score, 49);
+  assert.equal(result.criteria[0].score, 0);
 });
 
 test("routes materially conflicting findings to manual review", () => {
@@ -121,8 +121,8 @@ test("routes materially conflicting findings to manual review", () => {
   const result = evaluateAgreement(agreement);
 
   assert.equal(result.decision, "manual_review");
-  assert.equal(result.recommendedReleaseMinor, null);
-  assert.equal(result.recommendedHoldMinor, null);
+  assert.equal(result.recommendedReleaseAtomic, null);
+  assert.equal(result.recommendedHoldAtomic, null);
   assert.ok(result.reasonCodes.includes("EVALUATOR_CONFLICT"));
 });
 
@@ -157,4 +157,47 @@ test("produces the same evaluation ID for semantically identical input", () => {
 
   assert.match(first.evaluationId, /^eval_[a-f0-9]{32}$/);
   assert.equal(first.evaluationId, second.evaluationId);
+});
+
+test("rejects repeated findings from the same evaluator for one criterion", () => {
+  const agreement = baseAgreement();
+  agreement.findings.push({
+    id: "f_api_duplicate",
+    criterionId: "api",
+    evaluator: "reviewer-a",
+    score: 100,
+    confidence: 1,
+    evidenceIds: ["e_api"],
+    rationale: "A repeated vote must not increase this evaluator's influence.",
+  });
+
+  assert.throws(
+    () => evaluateAgreement(agreement),
+    (error) =>
+      error instanceof EvaluationError &&
+      error.code === "DUPLICATE_EVALUATOR_FINDING",
+  );
+});
+
+test("does not award value when all evidence is inconclusive", () => {
+  const agreement = baseAgreement();
+  agreement.evidence[1].result = "inconclusive";
+  agreement.findings[1].score = 100;
+
+  const result = evaluateAgreement(agreement);
+
+  assert.equal(result.criteria[1].score, 0);
+  assert.equal(result.criteria[1].earnedAtomic, 0);
+  assert.ok(result.reasonCodes.includes("NO_SUPPORTING_EVIDENCE"));
+});
+
+test("requires explicit, bounded asset denomination", () => {
+  const agreement = baseAgreement();
+  agreement.asset.decimals = 19;
+
+  assert.throws(
+    () => evaluateAgreement(agreement),
+    (error) =>
+      error instanceof EvaluationError && error.code === "INVALID_FIELD",
+  );
 });
