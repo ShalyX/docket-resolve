@@ -1,6 +1,6 @@
 # Docket upgrade handoff
 
-Updated: September 19, 2026
+Updated: September 24, 2026
 
 ## Objective
 
@@ -16,10 +16,9 @@ The memorable outcome is the proportional recommendation: for example, release 2
 
 - Source repository: https://github.com/ShalyX/docket-resolve
 - Public deployment: https://docket-resolve.vercel.app
-- Reviewed source commit: `f74c35643669646c7a8634c6570bb85a095dc3af`
 - Official submission PR: https://github.com/xagentAI/xagt-plugin/pull/74
-- Submission branch commit: `109b50797ab56fd5add4a36af78a27b8e18dc5b2`
 - PR state at handoff: open, mergeable, automated receipt check passing, awaiting manual review
+- Final hardening candidate: reviewed locally and awaiting explicit approval before its public source, deployment, and submission metadata are updated
 
 Do not update any of these public artifacts until the user reviews and explicitly approves the upgrade.
 
@@ -36,7 +35,7 @@ Do not update any of these public artifacts until the user reviews and explicitl
 - Material evaluator disagreement returns `manual_review` with null financial fields.
 - Identical semantic input produces the same evaluation ID.
 - `/health` and the X-Agent proof endpoint bind the deployment to its source commit.
-- 38 automated tests and syntax checks pass.
+- 47 automated tests and syntax checks pass.
 
 ## Current local upgrade slice
 
@@ -48,6 +47,8 @@ Do not update any of these public artifacts until the user reviews and explicitl
 - `npm run demo:agent` executes the full validation → cited review → proportional resolution workflow through a real MCP stdio client.
 - Persisted case lifecycle exists through HTTP and MCP: create, get, retrieve evidence, review, and resolve.
 - Bearer-token authentication maps agents to tenants; case reads and writes are tenant-scoped.
+- MCP tools enforce read and write scopes independently; read-only identities cannot mutate cases.
+- Review and evidence-retrieval retries are idempotent before external model or network work, including same-process concurrent retries.
 - Evidence retrieval is bounded to HTTPS, requires an explicit allowlist in required-auth/production mode, checks resolved addresses for private ranges, blocks private hosts, rejects redirects, enforces size/time limits, and verifies SHA-256 digests.
 - The local reviewer workspace uses a deterministic, synthetic evidence fixture so its default “Retrieve & verify URLs” flow succeeds without public network dependencies; the all-failed retrieval state remains an explicit regression case, and production configuration never injects the fixture provider.
 - The responsive case workspace shows the release/hold ledger, cited findings, review state, and audit events.
@@ -59,8 +60,9 @@ not a claim that the full production plan is complete.
 
 ## Known limitations
 
-- The durable store is file-backed and single-host; it is not yet a shared transactional database for multiple instances.
+- The persistent store is file-backed and single-host; it is not a durable shared database for serverless or multiple instances.
 - Authentication is an opaque bearer-token map for the local production profile, not a full OAuth resource server or identity-provider integration.
+- The public hackathon deployment is an anonymous sandbox. Its rate limit is a best-effort per-process guardrail, not a distributed production quota.
 - Evidence retrieval does not yet perform malware scanning or tenant-approved connector integrations.
 - The workspace supports local direct evidence notes; hosted evidence connectors and richer case navigation remain future work.
 - There is no payment or wallet integration by design.
