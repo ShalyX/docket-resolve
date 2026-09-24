@@ -18,9 +18,9 @@ The memorable outcome is the proportional recommendation: for example, release 2
 - Public deployment: https://docket-resolve.vercel.app
 - Official submission PR: https://github.com/xagentAI/xagt-plugin/pull/74
 - PR state at handoff: open, mergeable, automated receipt check passing, awaiting manual review
-- Final hardening candidate: reviewed locally and awaiting explicit approval before its public source, deployment, and submission metadata are updated
+- Final hardening release: approved, published from the reviewed source, and ready for final submission metadata binding
 
-Do not update any of these public artifacts until the user reviews and explicitly approves the upgrade.
+Future public updates still require user review and explicit approval.
 
 ## Verified existing behavior
 
@@ -37,7 +37,7 @@ Do not update any of these public artifacts until the user reviews and explicitl
 - `/health` and the X-Agent proof endpoint bind the deployment to its source commit.
 - 47 automated tests and syntax checks pass.
 
-## Current local upgrade slice
+## Current released upgrade slice
 
 - A provider-neutral AI review boundary exists.
 - The default hosted provider is Gemini `gemini-3.1-flash-lite`, using schema-constrained JSON and local validation before findings reach the settlement kernel.
@@ -55,7 +55,7 @@ Do not update any of these public artifacts until the user reviews and explicitl
 - `npm run demo:mcp:production` exercises the authenticated production-like MCP sequence and cross-tenant rejection.
 - The canonical workflow returns 230 USDC release, 20 USDC hold, and `fundsMoved: false`.
 
-This slice is implemented and verified locally. It is the first reviewable vertical slice,
+This slice is implemented, verified, and published. It is a hackathon release,
 not a claim that the full production plan is complete.
 
 ## Known limitations
@@ -77,7 +77,7 @@ not a claim that the full production plan is complete.
 6. MCP supports local stdio plus authenticated Streamable HTTP for the persisted case lifecycle.
 7. The first model integration uses a provider abstraction and strict structured output.
 8. Production persistence uses a case record plus immutable event history; the hackathon demo may ship before multi-tenant persistence if the limitation is explicit.
-9. Nothing is pushed, deployed, or submitted until the user reviews the phase output.
+9. Future pushes, deployments, and submission changes require user review of the phase output.
 
 ## First implementation slice
 
